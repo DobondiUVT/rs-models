@@ -3,9 +3,15 @@ import os
 import argparse
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent / 'src'))
+# Add project root to Python path
+project_root = str(Path(__file__).parent.parent.parent)
+sys.path.append(project_root)
 
-from src.utils.config import DATASET_CONFIG, OUTPUT_FILES, OPTIMIZATION_CONFIG
+from src.utils.config import (
+    DATASET_CONFIGS,
+    OPTIMIZATION_CONFIG,
+    get_output_files
+)
 from src.utils.evaluator import evaluate_models, save_results_to_csv, compare_results
 
 from src.models.model_base import BaseModel
@@ -26,7 +32,7 @@ MODEL_CLASSES = {
 }
 
 
-def run_single_method(method_name):
+def run_single_method(method_name, dataset_config):
     if method_name not in MODEL_CLASSES:
         print(f"Unknown method: {method_name}")
         print(f"Available methods: {list(MODEL_CLASSES.keys())}")
@@ -35,42 +41,72 @@ def run_single_method(method_name):
     print(f"\n{'='*60}")
     print(f"RUNNING {method_name.upper()} OPTIMIZATION")
     print(f"{'='*60}")
-    print(f"Dataset: {DATASET_CONFIG['name']}")
-    print(f"Target: {DATASET_CONFIG['target']}")
-    print(f"Path: {DATASET_CONFIG['path']}")
+    print(f"Dataset: {dataset_config['name']}")
+    print(f"Target: {dataset_config['target']}")
+    print(f"Path: {dataset_config['path']}")
 
     model_class = MODEL_CLASSES[method_name]
     config = OPTIMIZATION_CONFIG[method_name]
+    
+    output_files = get_output_files(dataset_config['name'])
 
     results = evaluate_models(
         model_class=model_class,
-        dataset_path=DATASET_CONFIG['path'],
-        target=DATASET_CONFIG['target'],
+        dataset_path=dataset_config['path'],
+        target=dataset_config['target'],
         **config
     )
 
-    save_results_to_csv(results, OUTPUT_FILES[method_name])
+    save_results_to_csv(results, output_files[method_name])
     return results
 
 
-def run_all_methods():
-    print(f"Running evaluation for dataset: {DATASET_CONFIG['name']}")
-    print(f"Target variable: {DATASET_CONFIG['target']}")
+def run_all_methods(dataset_config):
+    print(f"Running evaluation for dataset: {dataset_config['name']}")
+    print(f"Target variable: {dataset_config['target']}")
 
     all_results = {}
+    output_files = get_output_files(dataset_config['name'])
 
     for method_name in MODEL_CLASSES.keys():
         try:
-            results = run_single_method(method_name)
+            results = run_single_method(method_name, dataset_config)
             all_results[method_name] = results
         except Exception as e:
             print(f"Error running {method_name}: {str(e)}")
             continue
 
     print(f"\n{'='*60}")
-    print("FINAL COMPARISON")
+    print(f"FINAL COMPARISON FOR {dataset_config['name']}")
     print(f"{'='*60}")
-    compare_results(OUTPUT_FILES)
+    compare_results(output_files)
+    return all_results
+
+
+def run_all_datasets(method=None):
+    all_dataset_results = {}
+    
+    for dataset_name, dataset_config in DATASET_CONFIGS.items():
+        print(f"\n{'#'*80}")
+        print(f"Processing dataset: {dataset_name}")
+        print(f"{'#'*80}")
+        
+        if not os.path.exists(dataset_config['path']):
+            print(f"Warning: Dataset not found at {dataset_config['path']}, skipping...")
+            continue
+            
+        try:
+            if method and method != 'all':
+                results = run_single_method(method, dataset_config)
+            else:
+                results = run_all_methods(dataset_config)
+            all_dataset_results[dataset_name] = results
+        except Exception as e:
+            print(f"Error processing dataset {dataset_name}: {str(e)}")
+            continue
+    
+    print("\nAll datasets processed!")
+    return all_dataset_results
 
 
 def main():
@@ -83,8 +119,9 @@ def main():
     )
     parser.add_argument(
         '--dataset',
-        default=None,
-        help='Override dataset path from config'
+        choices=list(DATASET_CONFIGS.keys()) + ['all'],
+        default='all',
+        help='Dataset to process (default: all)'
     )
     parser.add_argument(
         '--target',
@@ -94,19 +131,21 @@ def main():
 
     args = parser.parse_args()
 
-    if args.dataset:
-        DATASET_CONFIG['path'] = args.dataset
-    if args.target:
-        DATASET_CONFIG['target'] = args.target
-
-    if not os.path.exists(DATASET_CONFIG['path']):
-        print(f"Error: Dataset not found at {DATASET_CONFIG['path']}")
-        return
-
-    if args.method == 'all':
-        run_all_methods()
+    if args.dataset == 'all':
+        run_all_datasets(args.method)
     else:
-        run_single_method(args.method)
+        dataset_config = DATASET_CONFIGS[args.dataset].copy()
+        if args.target:
+            dataset_config['target'] = args.target
+            
+        if not os.path.exists(dataset_config['path']):
+            print(f"Error: Dataset not found at {dataset_config['path']}")
+            return
+
+        if args.method == 'all':
+            run_all_methods(dataset_config)
+        else:
+            run_single_method(args.method, dataset_config)
 
 
 if __name__ == "__main__":

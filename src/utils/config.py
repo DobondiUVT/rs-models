@@ -1,4 +1,4 @@
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
@@ -8,25 +8,69 @@ from skopt.space import Real, Integer, Categorical
 from openbox.utils.config_space import ConfigurationSpace, UniformFloatHyperparameter, UniformIntegerHyperparameter, CategoricalHyperparameter
 import numpy as np
 import datetime
+import os
 
 GLOBAL_RANDOM_STATE = 42
 
-DATASET_CONFIG = {
-    'name': 'heart',
-    'path': '../datasets/heart.csv',
-    'target': 'HeartDisease'
+DATASET_CONFIGS = {
+    'heart': {
+        'name': 'heart',
+        'path': 'src/datasets/heart.csv',
+        'target': 'HeartDisease'
+    },
+
+    'wine_quality_red': {
+        'name': 'wine_quality_red',
+        'path': 'src/datasets/winequality-red.csv',
+        'target': 'quality'
+    },
+
+    'diabetes': {
+        'name': 'diabetes',
+        'path': 'src/datasets/diabetes.csv',
+        'target': 'Outcome'
+    },
+
+    'iris': {
+        'name': 'iris',
+        'path': 'src/datasets/iris.csv',
+        'target': 'species',
+        'url': 'https://raw.githubusercontent.com/mwaskom/seaborn-data/master/iris.csv'
+    },
+
+    'breast_cancer': {
+        'name': 'breast_cancer',
+        'path': 'src/datasets/breast-cancer.csv',
+        'target': 'diagnosis',
+        'url': 'https://raw.githubusercontent.com/selva86/datasets/master/BreastCancer.csv'
+    },
 }
 
-RESULTS_DIR = f'../results/{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}/{DATASET_CONFIG["name"]}'
-DATASETS_DIR = '../datasets'
+def get_results_dir(dataset_name):
+    base_dir = 'src/results'
+    dataset_dir = os.path.join(base_dir, dataset_name)
+    os.makedirs(dataset_dir, exist_ok=True)
+    return dataset_dir
+
+def get_output_files(dataset_name):
+    results_dir = get_results_dir(dataset_name)
+    return {
+        'base': f'{results_dir}/model_performance_base.csv',
+        'optuna': f'{results_dir}/model_performance_optuna.csv',
+        'bayesopt': f'{results_dir}/model_performance_bayesopt.csv',
+        'hyperopt': f'{results_dir}/model_performance_hyperopt.csv',
+        'openbox': f'{results_dir}/model_performance_openbox.csv',
+        'skopt': f'{results_dir}/model_performance_skopt.csv'
+    }
+
+DATASETS_DIR = 'src/datasets'
 
 MODEL_REGISTRY = {
     'RandomForest': RandomForestClassifier,
     'LogisticReg': LogisticRegression,
     'DecisionTree': DecisionTreeClassifier,
     'SVM': SVC,
-    'KNN': KNeighborsClassifier,
-    'GradientBoost': GradientBoostingClassifier
+    'KNN': KNeighborsClassifier
 }
 
 TRAIN_CONFIG = {
@@ -37,29 +81,23 @@ TRAIN_CONFIG = {
 
 OPTIMIZATION_CONFIG = {
     'base': {},
-    'optuna': {'n_trials': 100},
-    'bayesopt': {'n_iter': 100},
-    'hyperopt': {'max_evals': 100},
-    'openbox': {'max_runs': 100},
-    'skopt': {'n_calls': 100}
+    'optuna': {'n_trials': 5},
+    'bayesopt': {'n_iter': 5},
+    'hyperopt': {'max_evals': 5},
+    'openbox': {'max_runs': 5},
+    'skopt': {'n_calls': 5}
 }
 
-OUTPUT_FILES = {
-    'base': f'{RESULTS_DIR}/model_performance_base.csv',
-    'optuna': f'{RESULTS_DIR}/model_performance_optuna.csv',
-    'bayesopt': f'{RESULTS_DIR}/model_performance_bayesopt.csv',
-    'hyperopt': f'{RESULTS_DIR}/model_performance_hyperopt.csv',
-    'openbox': f'{RESULTS_DIR}/model_performance_openbox.csv',
-    'skopt': f'{RESULTS_DIR}/model_performance_skopt.csv'
-}
+DATASET_CONFIG = DATASET_CONFIGS['wine_quality_red']
+
+RESULTS_DIR = get_results_dir(DATASET_CONFIG['name'])
 
 MODEL_DEFAULT_PARAMS = {
     'RandomForest': {'random_state': GLOBAL_RANDOM_STATE},
     'LogisticReg': {'random_state': GLOBAL_RANDOM_STATE},
     'DecisionTree': {'random_state': GLOBAL_RANDOM_STATE},
     'SVM': {'random_state': GLOBAL_RANDOM_STATE},
-    'KNN': {},
-    'GradientBoost': {'random_state': GLOBAL_RANDOM_STATE}
+    'KNN': {}
 }
 
 HYPEROPT_SPACE = {
@@ -84,11 +122,6 @@ HYPEROPT_SPACE = {
     'SVM': {
         'C': hp.loguniform('C', np.log(0.01), np.log(10)),
         'kernel': hp.choice('kernel', ['linear', 'rbf', 'poly'])
-    },
-    'GradientBoost': {
-        'n_estimators': hp.choice('n_estimators', range(50, 201, 10)),
-        'learning_rate': hp.uniform('learning_rate', 0.01, 0.3),
-        'max_depth': hp.choice('max_depth', range(3, 21))
     }
 }
 
@@ -114,11 +147,6 @@ SKOPT_SPACE = {
     'SVM': [
         Real(0.01, 10.0, prior='log-uniform', name='C'),
         Categorical(['linear', 'rbf', 'poly'], name='kernel'),
-    ],
-    'GradientBoost': [
-        Integer(50, 200, name='n_estimators'),
-        Real(0.01, 0.3, name='learning_rate'),
-        Integer(3, 20, name='max_depth'),
     ]
 }
 
@@ -127,8 +155,7 @@ OPENBOX_SPACE = {
     'LogisticReg': ConfigurationSpace(),
     'DecisionTree': ConfigurationSpace(),
     'KNN': ConfigurationSpace(),
-    'SVM': ConfigurationSpace(),
-    'GradientBoost': ConfigurationSpace()
+    'SVM': ConfigurationSpace()
 }
 
 # Initialize OpenBox spaces
@@ -159,12 +186,6 @@ OPENBOX_SPACE['SVM'].add_hyperparameters([
     CategoricalHyperparameter('kernel', ['linear', 'rbf', 'poly']),
 ])
 
-OPENBOX_SPACE['GradientBoost'].add_hyperparameters([
-    UniformIntegerHyperparameter('n_estimators', 50, 200),
-    UniformFloatHyperparameter('learning_rate', 0.01, 0.3),
-    UniformIntegerHyperparameter('max_depth', 3, 20),
-])
-
 BAYESOPT_SPACE = {
     'RandomForest': {
         'n_estimators': (50, 200),
@@ -187,11 +208,6 @@ BAYESOPT_SPACE = {
     'SVM': {
         'C': (0.01, 10.0),
         'kernel': (0, 2)
-    },
-    'GradientBoost': {
-        'n_estimators': (50, 200),
-        'learning_rate': (0.01, 0.3),
-        'max_depth': (3, 20)
     }
 }
 
@@ -220,12 +236,6 @@ OPTUNA_PARAMS = {
     'SVM': {
         'C': ('float_log', 0.01, 10.0),
         'kernel': ('categorical', ['linear', 'rbf', 'poly']),
-        'random_state': GLOBAL_RANDOM_STATE
-    },
-    'GradientBoost': {
-        'n_estimators': ('int', 50, 200),
-        'learning_rate': ('float', 0.01, 0.3),
-        'max_depth': ('int', 3, 20),
         'random_state': GLOBAL_RANDOM_STATE
     }
 }
@@ -256,12 +266,6 @@ BAYESOPT_CONVERSION = {
         'C': 'float',
         'kernel': (['linear', 'rbf', 'poly'], 'int'),
         'random_state': GLOBAL_RANDOM_STATE
-    },
-    'GradientBoost': {
-        'n_estimators': 'int',
-        'learning_rate': 'float',
-        'max_depth': 'int',
-        'random_state': GLOBAL_RANDOM_STATE
     }
 }
 
@@ -275,10 +279,6 @@ HYPEROPT_CONVERSION = {
     'KNN': {
         'weights': ['uniform', 'distance'],
         'n_neighbors': list(range(3, 31))
-    },
-    'GradientBoost': {
-        'n_estimators': list(range(50, 201, 10)),
-        'max_depth': list(range(3, 21))
     },
     'RandomForest': {
         'n_estimators': list(range(50, 201, 10)),
